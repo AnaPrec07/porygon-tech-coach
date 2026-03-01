@@ -30,8 +30,12 @@ class Settings(BaseSettings):
 
     # Application
     app_env: Environment = Environment.DEVELOPMENT
-    app_secret_key: SecretStr = Field(default=..., description="JWT signing key")
+    app_secret_key: SecretStr = Field(
+        default="change-me-in-production-use-secret-manager",
+        description="JWT signing key",
+    )
     debug: bool = False
+    debug_mode: bool = True  # When True, bypass OAuth; use fixed DEBUG_USER_ID instead
     log_level: str = "INFO"
 
     # Google Cloud
@@ -57,14 +61,14 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
     cache_default_ttl_seconds: int = 86400
 
-    # Auth
-    google_client_id: str = Field(default=..., description="Google OAuth client ID")
+    # Auth (required when debug_mode=False; unused when debug_mode=True)
+    google_client_id: str = Field(default="", description="Google OAuth client ID")
     google_client_secret: SecretStr = Field(
-        default=..., description="Google OAuth client secret"
+        default="", description="Google OAuth client secret"
     )
     oauth_redirect_uri: str = "http://localhost:8000/auth/callback"
     allowed_user_email: str = Field(
-        default=...,
+        default="",
         description="Single-user mode: only this email can authenticate",
     )
 

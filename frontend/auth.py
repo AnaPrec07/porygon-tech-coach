@@ -1,4 +1,15 @@
-"""Authentication utilities for Streamlit frontend."""
+"""Authentication utilities for Streamlit frontend.
+
+DEBUG_MODE=True (default):
+  - is_authenticated() always returns True
+  - require_auth() is a no-op (sets a placeholder token so pages can read it)
+  - OAuth callback and login redirect are bypassed
+
+DEBUG_MODE=False:
+  - Full OAuth flow is active; JWT stored in st.session_state["access_token"]
+
+To re-enable full auth: set the DEBUG_MODE environment variable to "false".
+"""
 
 from __future__ import annotations
 
@@ -7,13 +18,34 @@ import os
 import httpx
 import streamlit as st
 
+# Feature flag — mirrors settings.debug_mode on the backend.
+# Read from env so both frontend and backend share the same toggle.
+DEBUG_MODE: bool = os.getenv("DEBUG_MODE", "true").lower() not in ("false", "0", "no")
+
+# Placeholder token sent to the backend in debug mode.
+# The backend ignores it when debug_mode=True; it is never validated.
+_DEBUG_TOKEN = "debug-mode-token"
+
 
 def is_authenticated() -> bool:
+    if DEBUG_MODE:
+        return True
     return "access_token" in st.session_state and bool(st.session_state["access_token"])
 
 
 def require_auth() -> None:
-    """Redirect to landing page if not authenticated."""
+    """
+    Enforce authentication gate.
+
+    In debug mode: sets a placeholder access_token so downstream pages that
+    read st.session_state["access_token"] work without modification.
+    In production mode: redirects to landing page if unauthenticated.
+    """
+    if DEBUG_MODE:
+        if "access_token" not in st.session_state:
+            st.session_state["access_token"] = _DEBUG_TOKEN
+        return
+
     if not is_authenticated():
         st.warning("Please sign in to continue.")
         if st.button("Go to Sign In"):
