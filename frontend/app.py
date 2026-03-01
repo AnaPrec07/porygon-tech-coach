@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from frontend.auth import handle_oauth_callback, is_authenticated, login_redirect
+from frontend.auth import DEBUG_MODE, handle_oauth_callback, is_authenticated, login_redirect
 
 st.set_page_config(
     page_title="Tech Coach",
@@ -27,18 +27,19 @@ st.set_page_config(
 
 
 def main() -> None:
-    # Handle OAuth callback (?code=...)
-    query_params = st.query_params
-    if "code" in query_params:
-        handle_oauth_callback(query_params["code"])
-        return
+    if not DEBUG_MODE:
+        # Handle OAuth callback (?code=...)
+        query_params = st.query_params
+        if "code" in query_params:
+            handle_oauth_callback(query_params["code"])
+            return
 
-    # Auth gate
-    if not is_authenticated():
-        _render_landing()
-        return
+        # Auth gate
+        if not is_authenticated():
+            _render_landing()
+            return
 
-    # Authenticated: show main dashboard summary
+    # Authenticated (or debug mode): show main dashboard summary
     _render_dashboard()
 
 

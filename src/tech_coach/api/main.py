@@ -26,7 +26,6 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from tech_coach.api.middleware.auth_middleware import AuthMiddleware
 from tech_coach.api.middleware.trace_middleware import TraceMiddleware
 from tech_coach.api.routers import auth, goals, plans, reflections, sessions, signals
 from tech_coach.config import get_settings
@@ -38,6 +37,44 @@ from tech_coach.infrastructure.observability.cost_estimator import CostEstimator
 from tech_coach.infrastructure.observability.logger import configure_logging, get_logger
 
 logger = get_logger(__name__)
+
+
+async def _ensure_debug_user() -> None:
+    """
+    Idempotently insert the debug user into the database at startup.
+
+    Lives in the infrastructure/application layer (not domain).
+    Safe to run multiple times — uses INSERT ... ON CONFLICT DO NOTHING.
+    Only called when settings.debug_mode is True.
+    """
+    from uuid import UUID
+
+    from sqlalchemy import text
+
+    from tech_coach.infrastructure.db.session import AsyncSessionLocal
+
+    debug_user_id = UUID("00000000-0000-0000-0000-000000000001")
+
+    async with AsyncSessionLocal() as session:
+        async with session.begin():
+            await session.execute(
+                text(
+                    """
+                    INSERT INTO users (id, email, display_name, google_sub, is_active)
+                    VALUES (:id, :email, :display_name, :google_sub, :is_active)
+                    ON CONFLICT (id) DO NOTHING
+                    """
+                ),
+                {
+                    "id": debug_user_id,
+                    "email": "debug@techcoach.local",
+                    "display_name": "Debug User",
+                    "google_sub": "debug-google-sub-00000000000000000001",
+                    "is_active": True,
+                },
+            )
+
+    logger.info("debug.user.ensured", user_id=str(debug_user_id))
 
 
 @asynccontextmanager
@@ -52,7 +89,12 @@ async def lifespan(app: FastAPI):  # type: ignore[type-arg]
         "app.starting",
         env=settings.app_env.value,
         project=settings.gcp_project_id,
+        debug_mode=settings.debug_mode,
     )
+
+    # Ensure debug user exists before accepting traffic (debug mode only)
+    if settings.debug_mode:
+        await _ensure_debug_user()
 
     # Initialize LLM infrastructure
     prompts_dir = Path(__file__).parent.parent.parent.parent.parent / "prompts" / "v1"
@@ -105,7 +147,11 @@ def create_app() -> FastAPI:
 
     # --- Routers ---
     api_prefix = "/api/v1"
-    app.include_router(auth.router, prefix=api_prefix)
+
+    # OAuth routes are disabled in debug mode; re-enable by setting debug_mode=False
+    if not settings.debug_mode:
+        app.include_router(auth.router, prefix=api_prefix)
+
     app.include_router(goals.router, prefix=api_prefix, tags=["goals"])
     app.include_router(plans.router, prefix=api_prefix, tags=["plans"])
     app.include_router(reflections.router, prefix=api_prefix, tags=["reflections"])

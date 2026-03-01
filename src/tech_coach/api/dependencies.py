@@ -9,6 +9,11 @@ Design:
   - Current user is extracted from JWT on every authenticated request
   - Repositories are instantiated per-request (lightweight, stateless)
   - Use cases are instantiated per-request using provided repositories
+
+Debug mode (DEBUG_MODE=True in config):
+  - get_current_user_id() always returns DEBUG_USER_ID
+  - get_current_user() returns a pre-built User without JWT/DB validation
+  - Full OAuth path is preserved and can be re-enabled by setting debug_mode=False
 """
 
 from __future__ import annotations
@@ -20,6 +25,7 @@ from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from tech_coach.config import get_settings
 from tech_coach.domain.models.user import User
 from tech_coach.domain.repositories.goal_repository import GoalRepository
 from tech_coach.domain.repositories.plan_repository import PlanRepository
@@ -41,8 +47,39 @@ from tech_coach.infrastructure.db.repositories.signal_repository import (
 from tech_coach.infrastructure.db.session import get_db_session
 from tech_coach.infrastructure.llm.vertex_client import VertexAIClient
 
-security = HTTPBearer()
+# ---------------------------------------------------------------------------
+# Debug user — fixed identity used when debug_mode=True
+# ---------------------------------------------------------------------------
+
+DEBUG_USER_ID: UUID = UUID("00000000-0000-0000-0000-000000000001")
+
+_DEBUG_USER = User(
+    id=DEBUG_USER_ID,
+    email="debug@techcoach.local",
+    display_name="Debug User",
+    google_sub="debug-google-sub-00000000000000000001",
+    is_active=True,
+)
+
+# ---------------------------------------------------------------------------
+# Auth infrastructure (kept intact; inactive when debug_mode=True)
+# ---------------------------------------------------------------------------
+
+# auto_error=False so missing/invalid tokens yield None instead of 401,
+# allowing the debug path in get_current_user to short-circuit cleanly.
+security = HTTPBearer(auto_error=False)
 _jwt_handler = JWTHandler()
+
+
+def get_current_user_id() -> UUID:
+    """
+    Return the current user's UUID.
+
+    When debug_mode=True this always returns DEBUG_USER_ID.
+    When debug_mode=False this is a thin wrapper that callers should replace
+    with get_current_user().id — kept here for explicit single-UUID use cases.
+    """
+    return DEBUG_USER_ID
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
@@ -52,18 +89,31 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 
 
 async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
     db: AsyncSession = Depends(get_db),
 ) -> User:
     """
-    Extract and validate the authenticated user from JWT.
+    Return the authenticated User for this request.
 
-    Raises 401 if token is invalid or expired.
-    Raises 403 if user is not authorized (single-user mode).
+    debug_mode=True  → returns _DEBUG_USER immediately; no JWT, no DB lookup.
+    debug_mode=False → full JWT validation + active-user DB check (production path).
 
     The User object is the authoritative identity for all downstream logic.
     user_id from this object must be passed to all repository calls.
     """
+    settings = get_settings()
+
+    if settings.debug_mode:
+        return _DEBUG_USER
+
+    # --- Production path (OAuth + JWT) ---
+    if credentials is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
     try:
         user_id = _jwt_handler.extract_user_id(credentials.credentials)
     except TokenError as exc:
