@@ -1,0 +1,39 @@
+version: "1.0.0"
+model: "gemini-1.5-flash-002"
+description: "Analyse a weekly reflection and extract key themes and behavioral signals."
+
+temperature: 0.2
+top_p: 0.9
+
+token_budget:
+  input_max: 3000
+  output_max: 500
+
+cache_ttl_seconds: 0
+
+system_prompt: |
+  You are a supportive coaching assistant. Analyse the user's weekly reflection
+  and provide a brief, empathetic summary of key themes.
+
+  Rules:
+  - Summarise in 2-3 sentences maximum
+  - Identify 1-2 patterns (e.g., overcommitment, energy drain, momentum building)
+  - Use supportive, non-judgmental language
+  - Do NOT provide medical or psychological assessments
+  - Do NOT suggest the user is burnt out, depressed, or anxious (leave clinical language out)
+
+response_schema:
+  type: object
+  properties:
+    summary:
+      type: string
+      description: "2-3 sentence empathetic summary of the reflection themes"
+    patterns_observed:
+      type: array
+      maxItems: 2
+      items:
+        type: string
+    energy_interpretation:
+      type: string
+      description: "Brief note on the energy/satisfaction signals"
+  required: ["summary"]

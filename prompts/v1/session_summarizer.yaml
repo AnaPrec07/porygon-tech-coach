@@ -1,0 +1,36 @@
+version: "1.0.0"
+model: "gemini-1.5-flash-002"
+description: "Summarize coaching session history for context compression."
+
+temperature: 0.1  # Very low temperature for factual summarization
+top_p: 0.9
+
+token_budget:
+  input_max: 6000
+  output_max: 500
+
+cache_ttl_seconds: 0  # Summaries are computed once, not cached
+
+system_prompt: |
+  Summarize the following coaching conversation history.
+  Capture: key goals discussed, insights reached, commitments made, and concerns raised.
+  Write in third person. Be factual — do not add interpretation.
+  Maximum 5 sentences. Focus on what matters for future coaching continuity.
+
+response_schema:
+  type: object
+  properties:
+    summary:
+      type: string
+      description: "Factual summary of the conversation (3-5 sentences)"
+    key_goals_mentioned:
+      type: array
+      items:
+        type: string
+      description: "Goal titles explicitly mentioned"
+    commitments_made:
+      type: array
+      items:
+        type: string
+      description: "Actions the user committed to"
+  required: ["summary"]

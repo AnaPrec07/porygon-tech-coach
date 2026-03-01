@@ -1,0 +1,53 @@
+version: "1.0.0"
+model: "gemini-1.5-pro-002"
+description: "Refine a user goal into structured SMART criteria."
+
+temperature: 0.2
+top_p: 0.9
+
+token_budget:
+  input_max: 2000
+  output_max: 1000
+
+cache_ttl_seconds: 0  # Goal refinement is user-specific, never cached
+
+system_prompt: |
+  You are an expert goal-setting coach. Your task is to refine a user's goal
+  into clear, actionable SMART criteria.
+
+  SMART framework:
+  - Specific: Clear, unambiguous, answers "what exactly?"
+  - Measurable: Has concrete metrics or observable outcomes
+  - Achievable: Realistic given the user's context and timeline
+  - Relevant: Connects to the user's broader objectives
+  - Time-bound: Has a specific deadline with intermediate checkpoints
+
+  Rules:
+  - Each criterion must be 1-2 sentences maximum
+  - Be concrete — avoid vague language like "improve" or "get better"
+  - Do not add criteria or goals the user hasn't mentioned
+  - If the goal is too vague, ask for clarification in the "specific" field
+  - Do not make assumptions about the user's resources or skills
+
+response_schema:
+  type: object
+  properties:
+    specific:
+      type: string
+      description: "Clear description of what will be achieved"
+    measurable:
+      type: string
+      description: "How progress and completion will be measured"
+    achievable:
+      type: string
+      description: "Why this is realistic given the constraints"
+    relevant:
+      type: string
+      description: "Connection to broader professional/personal objectives"
+    time_bound:
+      type: string
+      description: "Specific deadline and 1-2 intermediate milestones"
+    refinement_notes:
+      type: string
+      description: "Optional: clarification questions or concerns about the goal"
+  required: ["specific", "measurable", "achievable", "relevant", "time_bound"]

@@ -1,0 +1,62 @@
+version: "1.0.0"
+model: "gemini-1.5-flash-002"  # Flash for cost efficiency on structured generation
+description: >
+  Generate concrete weekly tasks for each active goal within allocated time budgets.
+  Uses Flash model (lower cost) since this is structured generation, not nuanced coaching.
+
+temperature: 0.3
+top_p: 0.9
+
+token_budget:
+  input_max: 4000
+  output_max: 2000
+
+cache_ttl_seconds: 3600  # Plans can be cached for 1h (re-generate still allowed)
+
+system_prompt: |
+  You are a productivity planning assistant. Generate concrete, achievable weekly tasks
+  for a user's active goals within the specified time allocations.
+
+  Rules:
+  - Generate 2-4 tasks per goal
+  - Each task must be completable in a single work session (5-90 minutes)
+  - Tasks must start with a verb (e.g., "Write", "Read", "Implement", "Review")
+  - Vary cognitive load: include at least one deep work and one lighter task per goal
+  - Be specific: "Read Chapter 3 of Designing Data-Intensive Applications" not "Read a book"
+  - Do not exceed the allocated hours per goal
+  - ADHD constraint: no task should require more than 90 minutes of sustained focus
+
+  Cognitive load classification:
+  - deep_work: Requires sustained focus (code writing, deep reading, problem-solving)
+  - medium: Structured work (reviewing, editing, planning)
+  - admin: Low-cognitive overhead (organizing, researching links, setting up tools)
+
+response_schema:
+  type: object
+  properties:
+    tasks:
+      type: array
+      items:
+        type: object
+        properties:
+          goal_title:
+            type: string
+            description: "Exact goal title as provided"
+          title:
+            type: string
+            description: "Concrete task title starting with a verb"
+          description:
+            type: string
+            description: "Brief description of what to do and why (1-2 sentences)"
+          estimated_minutes:
+            type: integer
+            minimum: 5
+            maximum: 90
+          cognitive_load:
+            type: string
+            enum: ["deep_work", "medium", "admin"]
+        required: ["goal_title", "title", "estimated_minutes", "cognitive_load"]
+    weekly_summary:
+      type: string
+      description: "1-2 sentence narrative of the week's focus"
+  required: ["tasks", "weekly_summary"]
